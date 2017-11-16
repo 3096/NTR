@@ -6,6 +6,17 @@
 #define O_RDWR   3
 #define O_CREAT  4
 
+#define __datetime_selector        (*(vu32*)0x1FF81000)
+#define __datetime0 (*(volatile datetime_t*)0x1FF81020)
+#define __datetime1 (*(volatile datetime_t*)0x1FF81040)
+
+#define TICKS_PER_MSEC (268123.480)
+
+typedef struct {
+	u64 date_time;
+	u64 update_tick;
+	//...
+} datetime_t;
 
 
 u8 *image_buf = NULL;
@@ -13,6 +24,23 @@ u8 *image_buf = NULL;
 
 
 
+u64 osGetUnixTimeMs(void) {
+	u32 s1, s2 = __datetime_selector & 1;
+	datetime_t dt;
+
+	do {
+		s1 = s2;
+		if(!s1)
+			dt = __datetime0;
+		else
+			dt = __datetime1;
+		s2 = __datetime_selector & 1;
+	} while(s2 != s1);
+
+	u64 delta = svc_getSystemTick() - dt.update_tick;
+
+	return dt.date_time + (u64)(((double)(delta))/TICKS_PER_MSEC) - 2208988800000;
+}
 
 int sdf_open(char *filename, int mode)
 {
@@ -197,29 +225,6 @@ void rev_image(u8 *dst, int width, int height, u8 *src, int src_pitch, int forma
 }
 
 
-int bmp_index;
-
-int get_file_index(void)
-{
-	int fd;
-	char name[64];
-	int id;
-
-	id = 0;
-	while (1){
-		xsprintf(name, "/top_%04d.bmp", id);
-		fd = sdf_open(name, O_RDWR);
-		if (fd <= 0){
-			break;
-		}
-		sdf_close(fd);
-		id += 1;
-	}
-
-	return id;
-}
-
-
 void allocImageBuf() {
 	if (image_buf) {
 		return;
@@ -272,6 +277,13 @@ void do_screen_shoot(void)
 	tl_pitch = REG(IoBasePdc + 0x490);
 	bl_pitch = REG(IoBasePdc + 0x590);
 
+	u64 ssTimeMsec = osGetUnixTimeMs();
+	u64 ssTimeSec = ssTimeMsec / 1000;
+	u16 ssMsec = ssTimeMsec % 1000;
+	struct tm *stm = gmtime(&ssTimeSec);
+	char ssTimeStr[16];
+	strftime(ssTimeStr, 16, "%Y%m%d-%H%M%S", stm);
+
 	// TOP screen
 	current_fb = REG(IoBasePdc + 0x478);
 	current_fb &= 1;
@@ -279,7 +291,7 @@ void do_screen_shoot(void)
 
 	rev_buf = workingBuffer + sizeof(struct BitmapHeader);
 	rev_image(rev_buf, 400, 240, workingBuffer + 0x50000, tl_pitch, tl_format);
-	xsprintf(name, "/top_%04d.bmp", bmp_index);
+	xsprintf(name, "/Screenshots/Screenshot_%s-%03d_top.bmp", ssTimeStr, ssMsec);
 	bmp_write(workingBuffer, 400, 240, name);
 
 
@@ -290,11 +302,9 @@ void do_screen_shoot(void)
 
 	rev_buf = workingBuffer + sizeof(struct BitmapHeader);
 	rev_image(rev_buf, 320, 240, workingBuffer + 0x50000, bl_pitch, bl_format);
-	xsprintf(name, "/bot_%04d.bmp", bmp_index);
+	xsprintf(name, "/Screenshots/Screenshot_%s-%03d_bot.bmp", ssTimeStr, ssMsec);
 	bmp_write(workingBuffer, 320, 240, name);
 	disp(100, 0x01ff00ff);
-
-	bmp_index += 1;
 }
 
 u32 takeScreenShot() {
@@ -814,8 +824,6 @@ int screenshotMain() {
 	plgRegisterMenuEntry(1, plgTranslate("Real-Time Save (Experimental)"), instantSaveMenu);
 
 	nsDbgPrint("fsUserHandle: %08x\n", fsUserHandle);
-	bmp_index = get_file_index();
-	nsDbgPrint("bmp index is: %d", bmp_index);
 
 	if (ntrConfig->isNew3DS) {
 		plgRegisterMenuEntry(1, plgTranslate("CPU Clock (New3DS Only)"), cpuClockUi);
@@ -828,8 +836,3 @@ int screenshotMain() {
 	plgRegisterMenuEntry(1, plgTranslate("Screen Filter"), nightShiftUi);
 
 }
-
-
-
-
-
