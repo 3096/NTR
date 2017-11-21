@@ -282,7 +282,7 @@ void do_screen_shoot(void)
 	bl_pitch = REG(IoBasePdc + 0x590);
 
 	u64 ssTimeMsec = osGetUnixTimeMs();
-	u64 ssTimeSec = ssTimeMsec / 1000;
+	time_t ssTimeSec = ssTimeMsec / 1000;
 	u16 ssMsec = ssTimeMsec % 1000;
 	struct tm *stm = gmtime(&ssTimeSec);
 	char ssTimeStr[16];
