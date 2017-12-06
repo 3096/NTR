@@ -33,7 +33,7 @@ typedef u32(*FSReadTypeDef) (u32 a1, u32 a2, u32 a3, u32 a4, u32 buffer, u32 siz
 RT_HOOK HomeCardUpdateInitHook;
 
 u32 NTRMenuHotkey = 0x0C00;
-u32 ScreenshotHotkey = 0;
+u32 ScreenshotHotkey = PAD_L | PAD_R;
 
 
 #define STACK_SIZE 0x4000
@@ -117,10 +117,10 @@ void disp(u32 t, u32 cl) {
 	u32 i;
 
 	for ( i = 0; i < t; i++){
-		*(vu32*)(IoBaseLcd + 0x204) = cl;
+		*(vu32*)(IoBaseLcd + 0xA04) = cl;
 		svc_sleepThread(5000000);
 	}
-	*(vu32*)(IoBaseLcd + 0x204) = 0;
+	*(vu32*)(IoBaseLcd + 0xA04) = 0;
 }
 
 void setExitFlag() {
